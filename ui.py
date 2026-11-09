@@ -15,6 +15,9 @@ DARK = "#855336"
 FRAME = "#4b2e21"
 BACKGROUND = "#241b18"
 ACCENT = "#e7bc67"
+ANIMATION_FRAMES = 12
+ANIMATION_DELAY_MS = 32
+STEP_PAUSE_MS = 380
 
 
 class DamaWindow:
@@ -36,6 +39,9 @@ class DamaWindow:
         self.step_index = 0
         self.preview: list[list[str | None]] | None = None
         self.last_move: Move | None = None
+        self.ai_move: Move | None = None
+        self.ai_step = 0
+        self.animated_piece: tuple[str, float, float] | None = None
 
         width = BOARD_SIZE + 2 * MARGIN + PANEL_WIDTH
         height = BOARD_SIZE + 2 * MARGIN
@@ -74,10 +80,15 @@ class DamaWindow:
     def undo(self) -> None:
         if self.screen != "game":
             return
+        was_computer_turn = self.ai_thinking and self.mode == "computer"
         self.ai_generation += 1
         self.ai_thinking = False
         self.ai_error = False
-        if self.preview is not None:
+        if was_computer_turn:
+            self.clear_selection()
+            self.game.undo()
+            self.last_move = None
+        elif self.preview is not None:
             self.clear_selection()
         elif self.game.undo():
             if self.mode == "computer" and self.game.turn == WHITE:
@@ -91,6 +102,9 @@ class DamaWindow:
         self.candidates = []
         self.step_index = 0
         self.preview = None
+        self.ai_move = None
+        self.ai_step = 0
+        self.animated_piece = None
 
     def on_click(self, event: tk.Event) -> None:
         if self.screen == "menu":
@@ -111,12 +125,12 @@ class DamaWindow:
                 self.show_menu()
 
     def click_menu(self, x: int, y: int) -> None:
-        if 194 <= x <= 590 and 190 <= y <= 260:
+        if 52 <= x <= 448 and 205 <= y <= 275:
             self.start_game("local")
-        elif 194 <= x <= 590 and 276 <= y <= 346:
+        elif 52 <= x <= 448 and 291 <= y <= 361:
             self.start_game("computer")
-        elif 406 <= y <= 452:
-            for name, left, right in (("easy", 194, 316), ("normal", 328, 450), ("hard", 462, 584)):
+        elif 426 <= y <= 472:
+            for name, left, right in (("easy", 52, 174), ("normal", 186, 308), ("hard", 320, 442)):
                 if left <= x <= right:
                     self.difficulty = name
                     self.draw()
@@ -197,15 +211,69 @@ class DamaWindow:
                 return
             if result_generation != generation:
                 continue
-            self.ai_thinking = False
             if isinstance(result, Exception):
+                self.ai_thinking = False
                 self.ai_error = True
                 self.draw()
                 return
-            self.game.play(result)
-            self.last_move = result
-            self.draw()
+            self.ai_move = result
+            self.ai_step = 0
+            self.preview = [row[:] for row in self.game.board]
+            self.start_animation_step(generation)
             return
+
+    def start_animation_step(self, generation: int) -> None:
+        if generation != self.ai_generation or self.ai_move is None or self.preview is None:
+            return
+        start = self.ai_move.start if self.ai_step == 0 else self.ai_move.path[self.ai_step - 1]
+        end = self.ai_move.path[self.ai_step]
+        piece = self.preview[start[0]][start[1]]
+        assert piece is not None
+        self.preview[start[0]][start[1]] = None
+        self.animate_frame(generation, start, end, piece, 0)
+
+    def animate_frame(
+        self,
+        generation: int,
+        start: tuple[int, int],
+        end: tuple[int, int],
+        piece: str,
+        frame: int,
+    ) -> None:
+        if generation != self.ai_generation or self.ai_move is None or self.preview is None:
+            return
+        if frame < ANIMATION_FRAMES:
+            progress = frame / ANIMATION_FRAMES
+            row = start[0] + (end[0] - start[0]) * progress
+            col = start[1] + (end[1] - start[1]) * progress
+            self.animated_piece = (piece, MARGIN + col * CELL, MARGIN + row * CELL)
+            self.draw()
+            self.root.after(
+                ANIMATION_DELAY_MS,
+                lambda: self.animate_frame(generation, start, end, piece, frame + 1),
+            )
+            return
+        self.animated_piece = None
+        self.preview[end[0]][end[1]] = piece
+        if self.ai_move.captures:
+            captured = self.ai_move.captures[self.ai_step]
+            self.preview[captured[0]][captured[1]] = None
+        self.ai_step += 1
+        self.draw()
+        if self.ai_step < len(self.ai_move.path):
+            self.root.after(STEP_PAUSE_MS, lambda: self.start_animation_step(generation))
+        else:
+            self.root.after(STEP_PAUSE_MS, lambda: self.finish_computer_move(generation))
+
+    def finish_computer_move(self, generation: int) -> None:
+        if generation != self.ai_generation or self.ai_move is None:
+            return
+        move = self.ai_move
+        self.game.play(move)
+        self.last_move = move
+        self.ai_thinking = False
+        self.clear_selection()
+        self.draw()
 
     def draw(self) -> None:
         self.canvas.delete("all")
@@ -218,28 +286,56 @@ class DamaWindow:
     def draw_menu(self) -> None:
         self.canvas.create_rectangle(0, 0, 784, 572, fill=BACKGROUND, outline="")
         self.canvas.create_text(
-            392, 103, text="DAMA", fill="#f4dfb9",
+            52, 81, anchor="nw", text="DAMA", fill="#f4dfb9",
             font=("DejaVu Sans", 46, "bold")
         )
-        self.canvas.create_line(318, 153, 466, 153, fill="#b95b47", width=3)
-        self.draw_menu_card(194, 190, "İki oyuncu")
-        self.draw_menu_card(194, 276, "Bilgisayara karşı")
+        self.canvas.create_line(52, 156, 200, 156, fill="#b95b47", width=3)
+        self.draw_menu_card(52, 205, "İki oyuncu")
+        self.draw_menu_card(52, 291, "Bilgisayara karşı")
         self.canvas.create_text(
-            194, 382, anchor="nw", text="SEVİYE", fill="#a99983",
+            52, 398, anchor="nw", text="SEVİYE", fill="#a99983",
             font=("DejaVu Sans", 10, "bold")
         )
-        labels = (("easy", "Kolay", 194), ("normal", "Orta", 328), ("hard", "Zor", 462))
+        labels = (("easy", "Kolay", 52), ("normal", "Orta", 186), ("hard", "Zor", 320))
         for value, label, x in labels:
             active = value == self.difficulty
             self.canvas.create_rectangle(
-                x, 406, x + 122, 452,
+                x, 426, x + 122, 472,
                 fill="#95553e" if active else "#302620",
                 outline="#be8160" if active else "#665044", width=2
             )
             self.canvas.create_text(
-                x + 61, 429, text=label,
+                x + 61, 449, text=label,
                 fill="#fff0d2" if active else "#a99983",
                 font=("DejaVu Sans", 12, "bold")
+            )
+        self.draw_menu_art()
+
+    def draw_menu_art(self) -> None:
+        for row in range(4):
+            for col in range(4):
+                x = 503 + col * 58
+                y = 155 + row * 58
+                self.canvas.create_rectangle(
+                    x, y, x + 58, y + 58,
+                    fill=DARK if (row + col) % 2 else LIGHT,
+                    outline="#694734", width=1
+                )
+        for row, col, fill, outline in (
+            (0, 1, "#eee1ca", "#8b7b68"),
+            (0, 3, "#eee1ca", "#8b7b68"),
+            (3, 0, "#c95749", "#80332c"),
+            (3, 2, "#c95749", "#80332c"),
+        ):
+            x = 503 + col * 58 + 29
+            y = 155 + row * 58 + 29
+            self.canvas.create_oval(
+                x - 22, y - 20, x + 22, y + 24,
+                fill="#2d211d", outline=""
+            )
+            self.canvas.create_oval(
+                x - 22, y - 23, x + 22, y + 21,
+                fill=fill, outline=outline, width=3
             )
 
     def draw_menu_card(self, x: int, y: int, title: str) -> None:
@@ -297,33 +393,36 @@ class DamaWindow:
                 piece = board[row][col]
                 if piece:
                     self.draw_piece(x1, y1, piece, square in selectable)
+        if self.animated_piece is not None:
+            piece, x, y = self.animated_piece
+            self.draw_piece(x, y, piece, False)
 
-    def draw_piece(self, x: int, y: int, piece: str, selectable: bool) -> None:
+    def draw_piece(self, x: float, y: float, piece: str, selectable: bool) -> None:
         red = piece.lower() == "r"
-        outer = "#7b171c" if red else "#918675"
-        face = "#c6383b" if red else "#f0e7d5"
-        inner = "#a8282c" if red else "#d8ceba"
+        rim = "#71332d" if red else "#8e806b"
+        face = "#c95749" if red else "#e9dfcb"
+        ring = "#a8453b" if red else "#b6a88e"
         self.canvas.create_oval(
-            x + 12, y + 16, x + CELL - 9, y + CELL - 7,
-            fill="#3b2b23", outline=""
+            x + 11, y + 15, x + CELL - 9, y + CELL - 6,
+            fill="#38251f", outline=""
         )
         self.canvas.create_oval(
-            x + 10, y + 10, x + CELL - 10, y + CELL - 10,
-            fill=outer, outline="#3b2924", width=2
+            x + 9, y + 9, x + CELL - 9, y + CELL - 11,
+            fill=rim, outline="#51342a", width=2
         )
         self.canvas.create_oval(
-            x + 15, y + 14, x + CELL - 15, y + CELL - 17,
-            fill=face, outline="#f49b92" if red else "#fff9ea", width=2
+            x + 13, y + 12, x + CELL - 13, y + CELL - 15,
+            fill=face, outline="#e78d7b" if red else "#fff8e9", width=2
         )
         self.canvas.create_oval(
-            x + 24, y + 23, x + CELL - 24, y + CELL - 25,
-            fill=inner, outline=outer, width=2
+            x + 21, y + 20, x + CELL - 21, y + CELL - 23,
+            outline=ring, width=2
         )
         if piece.isupper():
             self.canvas.create_text(
                 x + CELL // 2, y + CELL // 2 - 1,
-                text="♛", fill="#f7d77b" if red else "#76562c",
-                font=("DejaVu Sans", 24, "bold")
+                text="♛", fill="#f7dfaa" if red else "#7d6445",
+                font=("DejaVu Sans", 23, "bold")
             )
         elif selectable:
             self.canvas.create_oval(
@@ -343,7 +442,7 @@ class DamaWindow:
         elif self.ai_error:
             status = "Motor açılamadı"
         elif self.ai_thinking:
-            status = "Bilgisayar düşünüyor"
+            status = "Rakip oynuyor" if self.ai_move else "Rakip düşünüyor"
         elif self.preview is not None:
             status = "Almaya devam et"
         else:
@@ -357,6 +456,11 @@ class DamaWindow:
                         for row in board for piece in row)
         white_count = sum(piece is not None and piece.lower() == "w"
                           for row in board for piece in row)
+        if self.animated_piece is not None:
+            if self.animated_piece[0].lower() == "r":
+                red_count += 1
+            else:
+                white_count += 1
         self.canvas.create_text(
             x, 183, anchor="nw", text=f"Kırmızı  {red_count}",
             fill="#e8c5b8", font=("DejaVu Sans", 13)
