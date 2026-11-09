@@ -14,9 +14,17 @@ Choose two players or play against the computer from the start screen. Computer 
 
 Select a piece, then click a marked square. For a capture chain, click each landing square. Use the buttons to start a new game, undo a move, or return to the menu. Ctrl N and Ctrl Z are keyboard shortcuts.
 
-The terminal version is available with `python3 dama.py`.
+The terminal version is available with `python3 cli.py`.
 
 The computer engine comes from [py-draughts](https://github.com/miskibin/py-draughts), licensed under GPL-3.0.
+
+## Files
+
+- `dama.py` contains the rules and game state.
+- `computer.py` connects the downloaded engine to the game.
+- `ui.py` handles input and animation.
+- `render.py` draws the menu and board.
+- `cli.py` runs the terminal version.
 
 ## Rules
 

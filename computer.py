@@ -11,6 +11,7 @@ def position(index: int) -> tuple[int, int]:
 
 
 def to_fen(game: Game) -> str:
+    # Red maps to engine white, and white maps to engine black.
     red: list[str] = []
     white: list[str] = []
     for row, cells in enumerate(game.board):
@@ -34,6 +35,7 @@ def choose_move(game: Game, difficulty: str = "normal") -> Move:
         @property
         def legal_moves(self):
             moves = super().legal_moves
+            # The engine allows slides during captures, so filter them.
             captures = [move for move in moves if move.captured_list]
             return captures or moves
 
