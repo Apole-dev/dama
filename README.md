@@ -12,9 +12,15 @@
 
 ## Oynama
 
-Bir taşa, sonra işaretli kareye tıkla. Zincirleme almada her varış karesine sırayla tıkla. Yeni oyun, geri al ve menü düğmeleri oyun ekranındadır.
+Bir taşa, sonra işaretli kareye tıkla. Aynı taşla birden fazla taş alırken her varış karesine sırayla tıkla. Yeni oyun, geri al ve menü düğmeleri oyun ekranındadır.
 
 Bilgisayara karşı oyunda kırmızı taşlar oyuncudadır. Kolay, orta ve zor seviye başlangıç ekranından seçilir.
+
+## Görseller
+
+![Başlangıç ekranı](images/menu.png)
+
+![Oyun ekranı](images/oyun.png)
 
 ## Proje mimarisi
 
@@ -33,7 +39,7 @@ Kurallar ve oyun durumu dama.py içindedir. computer.py indirilen motorun hamles
 
 ## Kurallar
 
-Kırmızı başlar. Her oyuncunun on iki taşı vardır. Taşlar çapraz ilerler. Alma zorunludur. Zincirleme alma tamamlanır. Son sıraya ulaşan taş dama olur. Hamlesi kalmayan oyuncu kaybeder.
+Kırmızı başlar. Her oyuncunun on iki taşı vardır. Taşlar çapraz ilerler. Alma zorunludur. Bir taşı aldıktan sonra aynı taşla başka bir taş alabiliyorsan devam etmelisin. Son sıraya ulaşan taş dama olur. Hamlesi kalmayan oyuncu kaybeder.
 
 ## Test
 
