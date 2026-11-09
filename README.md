@@ -5,12 +5,18 @@ Two player checkers game based on the supplied board image. The game uses Python
 ## Run
 
 ```sh
-python3 ui.py
+./run.sh
 ```
 
-Select a piece, then click a marked square. For a capture chain, click each landing square. Use the buttons to start a new game or undo a move. Ctrl N and Ctrl Z are keyboard shortcuts.
+The first run downloads the `py-draughts` package into `.venv`. Later runs use the installed package. This is a ready game engine, not a neural network model.
+
+Choose two players or play against the computer from the start screen. Computer levels are easy, normal, and hard. The computer uses the downloaded `py-draughts` engine. It does not need internet access during play.
+
+Select a piece, then click a marked square. For a capture chain, click each landing square. Use the buttons to start a new game, undo a move, or return to the menu. Ctrl N and Ctrl Z are keyboard shortcuts.
 
 The terminal version is available with `python3 dama.py`.
+
+The computer engine comes from [py-draughts](https://github.com/miskibin/py-draughts), licensed under GPL-3.0.
 
 ## Rules
 
@@ -23,5 +29,5 @@ The terminal version is available with `python3 dama.py`.
 ## Test
 
 ```sh
-python3 -m unittest -v
+.venv/bin/python -m unittest -v
 ```

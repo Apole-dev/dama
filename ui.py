@@ -1,6 +1,9 @@
+import queue
+import threading
 import tkinter as tk
 
-from dama import Game, Move, RED, SIZE
+from computer import choose_move
+from dama import Game, Move, RED, SIZE, WHITE
 
 
 CELL = 68
@@ -21,6 +24,13 @@ class DamaWindow:
         self.root.configure(bg=BACKGROUND)
         self.root.resizable(False, False)
         self.game = Game()
+        self.screen = "menu"
+        self.mode = "local"
+        self.difficulty = "normal"
+        self.ai_generation = 0
+        self.ai_thinking = False
+        self.ai_results: queue.SimpleQueue[tuple[int, Move | Exception]] = queue.SimpleQueue()
+        self.ai_error = False
         self.selected: tuple[int, int] | None = None
         self.candidates: list[Move] = []
         self.step_index = 0
@@ -36,19 +46,42 @@ class DamaWindow:
         self.canvas.pack()
         self.canvas.bind("<Button-1>", self.on_click)
         self.root.bind("<Control-z>", lambda event: self.undo())
-        self.root.bind("<Control-n>", lambda event: self.new_game())
+        self.root.bind("<Control-n>", lambda event: self.new_game() if self.screen == "game" else None)
+        self.draw()
+
+    def start_game(self, mode: str) -> None:
+        self.mode = mode
+        self.screen = "game"
+        self.new_game()
+
+    def show_menu(self) -> None:
+        self.ai_generation += 1
+        self.ai_thinking = False
+        self.ai_error = False
+        self.screen = "menu"
+        self.clear_selection()
         self.draw()
 
     def new_game(self) -> None:
+        self.ai_generation += 1
+        self.ai_thinking = False
+        self.ai_error = False
         self.game = Game()
         self.last_move = None
         self.clear_selection()
         self.draw()
 
     def undo(self) -> None:
+        if self.screen != "game":
+            return
+        self.ai_generation += 1
+        self.ai_thinking = False
+        self.ai_error = False
         if self.preview is not None:
             self.clear_selection()
         elif self.game.undo():
+            if self.mode == "computer" and self.game.turn == WHITE:
+                self.game.undo()
             self.last_move = None
             self.clear_selection()
         self.draw()
@@ -60,6 +93,9 @@ class DamaWindow:
         self.preview = None
 
     def on_click(self, event: tk.Event) -> None:
+        if self.screen == "menu":
+            self.click_menu(event.x, event.y)
+            return
         col = (event.x - MARGIN) // CELL
         row = (event.y - MARGIN) // CELL
         if 0 <= row < SIZE and 0 <= col < SIZE:
@@ -71,9 +107,25 @@ class DamaWindow:
                 self.new_game()
             elif 426 <= event.y <= 468:
                 self.undo()
+            elif 480 <= event.y <= 522:
+                self.show_menu()
+
+    def click_menu(self, x: int, y: int) -> None:
+        if 52 <= x <= 456 and 250 <= y <= 335:
+            self.start_game("local")
+        elif 52 <= x <= 456 and 352 <= y <= 437:
+            self.start_game("computer")
+        elif 458 <= y <= 502:
+            for name, left, right in (("easy", 52, 174), ("normal", 186, 308), ("hard", 320, 442)):
+                if left <= x <= right:
+                    self.difficulty = name
+                    self.draw()
+                    break
 
     def choose_square(self, square: tuple[int, int]) -> None:
-        if self.game.winner is not None:
+        if self.game.winner is not None or self.ai_thinking:
+            return
+        if self.mode == "computer" and self.game.turn == WHITE:
             return
         moves = self.game.legal_moves()
         if self.selected is None:
@@ -116,11 +168,139 @@ class DamaWindow:
             self.game.play(move)
             self.last_move = move
             self.clear_selection()
+            if self.mode == "computer" and self.game.winner is None:
+                self.start_computer_turn()
+
+    def start_computer_turn(self) -> None:
+        self.ai_thinking = True
+        generation = self.ai_generation
+        snapshot = Game(self.game.board, self.game.turn)
+
+        def worker() -> None:
+            try:
+                result = choose_move(snapshot, self.difficulty)
+            except Exception as error:
+                result = error
+            self.ai_results.put((generation, result))
+
+        threading.Thread(target=worker, daemon=True).start()
+        self.root.after(80, lambda: self.poll_computer(generation))
+
+    def poll_computer(self, generation: int) -> None:
+        if generation != self.ai_generation or self.screen != "game":
+            return
+        while True:
+            try:
+                result_generation, result = self.ai_results.get_nowait()
+            except queue.Empty:
+                self.root.after(80, lambda: self.poll_computer(generation))
+                return
+            if result_generation != generation:
+                continue
+            self.ai_thinking = False
+            if isinstance(result, Exception):
+                self.ai_error = True
+                self.draw()
+                return
+            self.game.play(result)
+            self.last_move = result
+            self.draw()
+            return
 
     def draw(self) -> None:
         self.canvas.delete("all")
+        if self.screen == "menu":
+            self.draw_menu()
+            return
         self.draw_board()
         self.draw_panel()
+
+    def draw_menu(self) -> None:
+        self.canvas.create_rectangle(0, 0, 784, 572, fill=BACKGROUND, outline="")
+        self.canvas.create_rectangle(0, 0, 14, 572, fill="#b34a3c", outline="")
+        self.canvas.create_text(
+            52, 41, anchor="nw", text="MASA OYUNU", fill=ACCENT,
+            font=("DejaVu Sans", 11, "bold")
+        )
+        self.canvas.create_text(
+            49, 72, anchor="nw", text="KIZIL", fill="#f4dfb9",
+            font=("DejaVu Sans", 44, "bold")
+        )
+        self.canvas.create_text(
+            49, 129, anchor="nw", text="DAMA", fill="#d95a49",
+            font=("DejaVu Sans", 44, "bold")
+        )
+        self.canvas.create_text(
+            53, 209, anchor="nw", text="Bir hamle seç. Tahtayı değiştir.",
+            fill="#bda88d", font=("DejaVu Sans", 12)
+        )
+        self.draw_menu_card(52, 250, "İKİ OYUNCU", "Aynı masada sırayla oynayın.", "01")
+        self.draw_menu_card(52, 352, "BİLGİSAYARA KARŞI", "Kırmızı taşlarla bilgisayara karşı oynayın.", "02")
+        labels = (("easy", "KOLAY", 52), ("normal", "ORTA", 186), ("hard", "ZOR", 320))
+        for value, label, x in labels:
+            active = value == self.difficulty
+            self.canvas.create_rectangle(
+                x, 458, x + 122, 502,
+                fill="#95553e" if active else "#302620",
+                outline=ACCENT if active else "#72543e", width=2
+            )
+            self.canvas.create_text(
+                x + 61, 480, text=label,
+                fill="#fff0d2" if active else "#a99983",
+                font=("DejaVu Sans", 11, "bold")
+            )
+        self.canvas.create_text(
+            52, 529, anchor="nw", text="Bilgisayar seviyesini seçin, sonra oyunu başlatın.",
+            fill="#a3917e", font=("DejaVu Sans", 10)
+        )
+        for row in range(4):
+            for col in range(4):
+                x = 511 + col * 58
+                y = 72 + row * 58
+                self.canvas.create_rectangle(
+                    x, y, x + 58, y + 58,
+                    fill=DARK if (row + col) % 2 else LIGHT,
+                    outline="#5a3b2d"
+                )
+        for x, y, fill, outline in (
+            (598, 101, "#f0e7d5", "#918675"),
+            (714, 101, "#f0e7d5", "#918675"),
+            (540, 275, "#c6383b", "#7b171c"),
+            (656, 275, "#c6383b", "#7b171c"),
+        ):
+            self.canvas.create_oval(
+                x - 23, y - 23, x + 23, y + 23,
+                fill=fill, outline=outline, width=5
+            )
+        self.canvas.create_text(
+            520, 342, anchor="nw", text="OYUN MODUNU SEÇ",
+            fill="#e8cda6", font=("DejaVu Sans", 13, "bold")
+        )
+        self.canvas.create_line(520, 378, 735, 378, fill="#745440", width=2)
+        self.canvas.create_text(
+            520, 397, anchor="nw", text="12 taş. 8 sıra.\nHer hamle önemli.",
+            fill="#bda88d", font=("DejaVu Sans", 12)
+        )
+
+    def draw_menu_card(self, x: int, y: int, title: str, detail: str, number: str) -> None:
+        self.canvas.create_rectangle(
+            x, y, x + 404, y + 85, fill="#342722", outline="#9d6947", width=2
+        )
+        self.canvas.create_rectangle(
+            x, y, x + 6, y + 85, fill="#cb654e", outline=""
+        )
+        self.canvas.create_text(
+            x + 23, y + 15, anchor="nw", text=title,
+            fill="#f6dfba", font=("DejaVu Sans", 16, "bold")
+        )
+        self.canvas.create_text(
+            x + 24, y + 50, anchor="nw", text=detail,
+            fill="#bca996", font=("DejaVu Sans", 10)
+        )
+        self.canvas.create_text(
+            x + 374, y + 23, text=number,
+            fill="#bd795a", font=("DejaVu Sans", 14, "bold")
+        )
 
     def draw_board(self) -> None:
         x0 = MARGIN
@@ -136,7 +316,7 @@ class DamaWindow:
         )
         selectable = (
             {move.start for move in self.game.legal_moves()}
-            if self.selected is None else set()
+            if self.selected is None and not self.ai_thinking else set()
         )
         for row in range(SIZE):
             for col in range(SIZE):
@@ -211,6 +391,10 @@ class DamaWindow:
         self.canvas.create_line(x, 91, x + 170, 91, fill="#8e6d4e", width=2)
         if self.game.winner:
             status = "Kırmızı kazandı" if self.game.winner == RED else "Beyaz kazandı"
+        elif self.ai_error:
+            status = "Motor açılamadı"
+        elif self.ai_thinking:
+            status = "Bilgisayar düşünüyor"
         elif self.preview is not None:
             status = "Almaya devam et"
         else:
@@ -232,6 +416,11 @@ class DamaWindow:
             x, 188, anchor="nw", text=f"Beyaz    {white_count}",
             fill="#f0e7d5", font=("DejaVu Sans", 13)
         )
+        mode_text = "İki oyuncu" if self.mode == "local" else "Bilgisayara karşı"
+        self.canvas.create_text(
+            x, 230, anchor="nw", text=mode_text,
+            fill=ACCENT, font=("DejaVu Sans", 11, "bold")
+        )
         tips = ("Taşı seç.", "İşaretli kareye tıkla.", "Alma varsa zorunludur.")
         for index, tip in enumerate(tips):
             self.canvas.create_text(
@@ -240,8 +429,9 @@ class DamaWindow:
             )
         self.draw_button(x, 372, "Yeni oyun", True)
         self.draw_button(x, 426, "Geri al", self.preview is not None or bool(self.game.history))
+        self.draw_button(x, 480, "Ana menü", True)
         self.canvas.create_text(
-            x, 493, anchor="nw", text="Ctrl N  Yeni oyun\nCtrl Z  Geri al",
+            x, 538, anchor="nw", text="Ctrl N  Yeni oyun    Ctrl Z  Geri al",
             fill="#a9947c", font=("DejaVu Sans", 10)
         )
 
