@@ -5,11 +5,12 @@ import tkinter as tk
 from computer import choose_move
 from dama import Game, Move, SIZE, WHITE
 from render import BACKGROUND, BOARD_SIZE, CELL, MARGIN, PANEL_WIDTH, GameRenderer
+from save import load_game, save_game
 
 
 ANIMATION_FRAMES = 12
 ANIMATION_DELAY_MS = 32
-STEP_PAUSE_MS = 380
+STEP_PAUSE_MS = 700
 
 
 class DamaWindow:
@@ -22,6 +23,13 @@ class DamaWindow:
         self.screen = "menu"
         self.mode = "local"
         self.difficulty = "normal"
+        self.theme = "classic"
+        self.saved_game = load_game()
+        if self.saved_game is not None and self.saved_game[0].winner is not None:
+            self.saved_game = None
+        if self.saved_game is not None:
+            self.theme = self.saved_game[4]
+        self.moves: list[Move] = []
         self.ai_generation = 0
         self.ai_thinking = False
         self.ai_results: queue.SimpleQueue[tuple[int, Move | Exception]] = queue.SimpleQueue()
@@ -53,12 +61,39 @@ class DamaWindow:
         self.screen = "game"
         self.new_game()
 
+    def continue_game(self) -> None:
+        saved = load_game()
+        if saved is None or saved[0].winner is not None:
+            self.saved_game = None
+            self.draw()
+            return
+        self.ai_generation += 1
+        self.game, self.moves, self.mode, self.difficulty, self.theme = saved
+        self.saved_game = saved
+        self.screen = "game"
+        self.ai_thinking = False
+        self.ai_error = False
+        self.last_move = self.moves[-1] if self.moves else None
+        self.clear_selection()
+        self.draw()
+        if self.mode == "computer" and self.game.turn == WHITE and self.game.winner is None:
+            self.start_computer_turn()
+
+    def persist(self) -> None:
+        save_game(self.moves, self.mode, self.difficulty, self.theme)
+        self.saved_game = None if self.game.winner is not None else (
+            self.game, self.moves, self.mode, self.difficulty, self.theme
+        )
+
     def show_menu(self) -> None:
         self.ai_generation += 1
         self.ai_thinking = False
         self.ai_error = False
         self.screen = "menu"
         self.clear_selection()
+        self.saved_game = load_game()
+        if self.saved_game is not None and self.saved_game[0].winner is not None:
+            self.saved_game = None
         self.draw()
 
     def new_game(self) -> None:
@@ -66,8 +101,10 @@ class DamaWindow:
         self.ai_thinking = False
         self.ai_error = False
         self.game = Game()
+        self.moves = []
         self.last_move = None
         self.clear_selection()
+        self.persist()
         self.draw()
 
     def undo(self) -> None:
@@ -81,14 +118,17 @@ class DamaWindow:
             # Undo the human move when a computer turn is pending.
             self.clear_selection()
             self.game.undo()
-            self.last_move = None
+            self.moves.pop()
         elif self.preview is not None:
             self.clear_selection()
         elif self.game.undo():
+            self.moves.pop()
             if self.mode == "computer" and self.game.turn == WHITE:
-                self.game.undo()
-            self.last_move = None
+                if self.game.undo():
+                    self.moves.pop()
             self.clear_selection()
+        self.last_move = self.moves[-1] if self.moves else None
+        self.persist()
         self.draw()
 
     def clear_selection(self) -> None:
@@ -104,6 +144,13 @@ class DamaWindow:
         if self.screen == "menu":
             self.click_menu(event.x, event.y)
             return
+        if self.game.winner is not None and 198 <= event.x <= 370:
+            if 307 <= event.y <= 351:
+                self.new_game()
+                return
+            if 361 <= event.y <= 405:
+                self.show_menu()
+                return
         col = (event.x - MARGIN) // CELL
         row = (event.y - MARGIN) // CELL
         if 0 <= row < SIZE and 0 <= col < SIZE:
@@ -117,12 +164,38 @@ class DamaWindow:
                 self.undo()
             elif 408 <= event.y <= 450:
                 self.show_menu()
+            elif 464 <= event.y <= 558:
+                self.show_history()
+
+    def show_history(self) -> None:
+        window = tk.Toplevel(self.root)
+        window.title("Hamleler")
+        window.geometry("300x400")
+        frame = tk.Frame(window)
+        frame.pack(fill="both", expand=True, padx=12, pady=12)
+        scrollbar = tk.Scrollbar(frame)
+        scrollbar.pack(side="right", fill="y")
+        history = tk.Listbox(frame, font=("DejaVu Sans", 11), yscrollcommand=scrollbar.set)
+        history.pack(side="left", fill="both", expand=True)
+        scrollbar.config(command=history.yview)
+        for index, move in enumerate(self.moves, 1):
+            side = "Kırmızı" if index % 2 else "Beyaz"
+            squares = (move.start,) + move.path
+            separator = " x " if move.captures else " - "
+            notation = separator.join(f"{chr(97 + col)}{8 - row}" for row, col in squares)
+            history.insert("end", f"{index}. {side}  {notation}")
+        history.yview_moveto(1)
 
     def click_menu(self, x: int, y: int) -> None:
         if 52 <= x <= 448 and 205 <= y <= 275:
             self.start_game("local")
         elif 52 <= x <= 448 and 291 <= y <= 361:
             self.start_game("computer")
+        elif self.saved_game is not None and 503 <= x <= 735 and 410 <= y <= 454:
+            self.continue_game()
+        elif 503 <= x <= 735 and 474 <= y <= 518:
+            self.theme = "slate" if self.theme == "classic" else "classic"
+            self.draw()
         elif 426 <= y <= 472:
             for name, left, right in (("easy", 52, 174), ("normal", 186, 308), ("hard", 320, 442)):
                 if left <= x <= right:
@@ -174,8 +247,10 @@ class DamaWindow:
         if completed:
             move = completed[0]
             self.game.play(move)
+            self.moves.append(move)
             self.last_move = move
             self.clear_selection()
+            self.persist()
             if self.mode == "computer" and self.game.winner is None:
                 self.start_computer_turn()
 
@@ -266,9 +341,11 @@ class DamaWindow:
             return
         move = self.ai_move
         self.game.play(move)
+        self.moves.append(move)
         self.last_move = move
         self.ai_thinking = False
         self.clear_selection()
+        self.persist()
         self.draw()
 
     def draw(self) -> None:

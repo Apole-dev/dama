@@ -12,9 +12,9 @@
 
 ## Oynama
 
-Bir taşa, sonra işaretli kareye tıkla. Aynı taşla birden fazla taş alırken her varış karesine sırayla tıkla. Yeni oyun, geri al ve menü düğmeleri oyun ekranındadır.
+Bir taşa, sonra işaretli kareye tıkla. Aynı taşla birden fazla taş alırken her varış karesine sırayla tıkla. Yeni oyun, geri al ve menü düğmeleri oyun ekranındadır. Son hamleler sağda görünür. Tümü düğmesi bütün hamleleri açar.
 
-Bilgisayara karşı oyunda kırmızı taşlar oyuncudadır. Kolay, orta ve zor seviye başlangıç ekranından seçilir.
+Bilgisayara karşı oyunda kırmızı taşlar oyuncudadır. Kolay, orta ve zor seviye başlangıç ekranından seçilir. Tema da başlangıç ekranından seçilir. Oyun her hamleden sonra kaydedilir. Devam et düğmesi kayıtlı oyunu açar. Oyun bitince sonuç ve yeniden oynama düğmesi görünür.
 
 ## Görseller
 
@@ -30,12 +30,13 @@ flowchart LR
     ui --> render[render.py]
     ui --> game[dama.py]
     ui --> computer[computer.py]
+    ui --> save[save.py]
     computer --> game
     computer --> engine[py-draughts]
     cli[cli.py] --> game
 ```
 
-Kurallar ve oyun durumu dama.py içindedir. computer.py indirilen motorun hamlesini oyuna aktarır. ui.py tıklamaları ve animasyonu yönetir. render.py ekranı çizer. cli.py terminalden oynamayı sağlar.
+Kurallar ve oyun durumu dama.py içindedir. computer.py indirilen motorun hamlesini oyuna aktarır. ui.py tıklamaları ve animasyonu yönetir. render.py ekranı çizer. save.py oyunu kaydeder ve açar. cli.py terminalden oynamayı sağlar.
 
 ## Kurallar
 

@@ -18,6 +18,9 @@ ACCENT = "#e7bc67"
 class RenderState(Protocol):
     screen: str
     difficulty: str
+    theme: str
+    saved_game: object | None
+    moves: list[Move]
     game: Game
     selected: Position | None
     candidates: list[Move]
@@ -27,6 +30,7 @@ class RenderState(Protocol):
     ai_thinking: bool
     ai_error: bool
     ai_move: Move | None
+    ai_step: int
     animated_piece: tuple[str, float, float] | None
 
 
@@ -42,6 +46,13 @@ class GameRenderer:
             return
         self.draw_board()
         self.draw_panel()
+        if self.state.game.winner is not None:
+            self.draw_result()
+
+    def colors(self) -> tuple[str, str, str, str, str, str, str]:
+        if self.state.theme == "slate":
+            return "#cbd5df", "#506275", "#263747", "#bd5650", "#f1eee5", "#713638", "#858e95"
+        return LIGHT, DARK, FRAME, "#c95749", "#e9dfcb", "#71332d", "#8e806b"
 
     def draw_menu(self) -> None:
         self.canvas.create_rectangle(0, 0, 784, 572, fill=BACKGROUND, outline="")
@@ -70,22 +81,30 @@ class GameRenderer:
                 font=("DejaVu Sans", 12, "bold")
             )
         self.draw_menu_art()
+        if self.state.saved_game is not None:
+            self.draw_menu_option(503, 410, "Devam et")
+        self.draw_menu_option(503, 474, "Tema  " + ("Klasik" if self.state.theme == "classic" else "Arduvaz"))
+
+    def draw_menu_option(self, x: int, y: int, label: str) -> None:
+        self.canvas.create_rectangle(x, y, x + 232, y + 44, fill="#342722", outline="#8e684d", width=2)
+        self.canvas.create_text(x + 116, y + 22, text=label, fill="#f6dfba", font=("DejaVu Sans", 12, "bold"))
 
     def draw_menu_art(self) -> None:
+        light, dark, _, red_face, white_face, red_rim, white_rim = self.colors()
         for row in range(4):
             for col in range(4):
                 x = 503 + col * 58
                 y = 155 + row * 58
                 self.canvas.create_rectangle(
                     x, y, x + 58, y + 58,
-                    fill=DARK if (row + col) % 2 else LIGHT,
+                    fill=dark if (row + col) % 2 else light,
                     outline="#694734", width=1
                 )
         for row, col, fill, outline in (
-            (0, 1, "#eee1ca", "#8b7b68"),
-            (0, 3, "#eee1ca", "#8b7b68"),
-            (3, 0, "#c95749", "#80332c"),
-            (3, 2, "#c95749", "#80332c"),
+            (0, 1, white_face, white_rim),
+            (0, 3, white_face, white_rim),
+            (3, 0, red_face, red_rim),
+            (3, 2, red_face, red_rim),
         ):
             x = 503 + col * 58 + 29
             y = 155 + row * 58 + 29
@@ -108,11 +127,12 @@ class GameRenderer:
         )
 
     def draw_board(self) -> None:
+        light, dark, frame, _, _, _, _ = self.colors()
         x0 = MARGIN
         y0 = MARGIN
         self.canvas.create_rectangle(
             x0 - 7, y0 - 7, x0 + BOARD_SIZE + 7, y0 + BOARD_SIZE + 7,
-            fill=FRAME, outline="#b88a56", width=3
+            fill=frame, outline="#b88a56", width=3
         )
         board = self.state.preview if self.state.preview is not None else self.state.game.board
         destinations = (
@@ -132,7 +152,7 @@ class GameRenderer:
                 square = (row, col)
                 self.canvas.create_rectangle(
                     x1, y1, x2, y2,
-                    fill=DARK if (row + col) % 2 else LIGHT,
+                    fill=dark if (row + col) % 2 else light,
                     outline="#71482f", width=1
                 )
                 if self.state.last_move and square in (self.state.last_move.start, self.state.last_move.end):
@@ -158,9 +178,10 @@ class GameRenderer:
             self.draw_piece(x, y, piece, False)
 
     def draw_piece(self, x: float, y: float, piece: str, selectable: bool) -> None:
+        _, _, _, red_face, white_face, red_rim, white_rim = self.colors()
         red = piece.lower() == "r"
-        rim = "#71332d" if red else "#8e806b"
-        face = "#c95749" if red else "#e9dfcb"
+        rim = red_rim if red else white_rim
+        face = red_face if red else white_face
         ring = "#a8453b" if red else "#b6a88e"
         self.canvas.create_oval(
             x + 11, y + 15, x + CELL - 9, y + CELL - 6,
@@ -202,7 +223,11 @@ class GameRenderer:
         elif self.state.ai_error:
             status = "Motor açılamadı"
         elif self.state.ai_thinking:
-            status = "Rakip oynuyor" if self.state.ai_move else "Rakip düşünüyor"
+            if self.state.ai_move and self.state.ai_move.captures:
+                step = min(self.state.ai_step + 1, len(self.state.ai_move.path))
+                status = f"Rakip alıyor {step}/{len(self.state.ai_move.path)}"
+            else:
+                status = "Rakip oynuyor" if self.state.ai_move else "Rakip düşünüyor"
         elif self.state.preview is not None:
             status = "Almaya devam et"
         else:
@@ -232,6 +257,25 @@ class GameRenderer:
         self.draw_button(x, 300, "Yeni oyun", True)
         self.draw_button(x, 354, "Geri al", self.state.preview is not None or bool(self.state.game.history))
         self.draw_button(x, 408, "Menü", True)
+        self.canvas.create_text(x, 465, anchor="nw", text="HAMLELER", fill="#a99983", font=("DejaVu Sans", 10, "bold"))
+        self.canvas.create_text(x + 170, 465, anchor="ne", text="Tümü", fill=ACCENT, font=("DejaVu Sans", 10))
+        for index, move in enumerate(self.state.moves[-3:], start=max(0, len(self.state.moves) - 3)):
+            start = f"{chr(97 + move.start[1])}{8 - move.start[0]}"
+            end = f"{chr(97 + move.end[1])}{8 - move.end[0]}"
+            action = "x" if move.captures else "-"
+            label = f"{index + 1}. {start}{action}{end}"
+            if len(move.captures) > 1:
+                label += f"  {len(move.captures)} taş"
+            self.canvas.create_text(x, 486 + (index - max(0, len(self.state.moves) - 3)) * 24,
+                                    anchor="nw", text=label, fill="#e8c5b8", font=("DejaVu Sans", 11))
+
+    def draw_result(self) -> None:
+        self.canvas.create_rectangle(118, 174, 450, 422, fill="#241b18", outline="#d7ad76", width=3)
+        winner = "Kırmızı kazandı" if self.state.game.winner == RED else "Beyaz kazandı"
+        self.canvas.create_text(284, 227, text="OYUN BİTTİ", fill="#a99983", font=("DejaVu Sans", 12, "bold"))
+        self.canvas.create_text(284, 268, text=winner, fill=ACCENT, font=("DejaVu Sans", 20, "bold"))
+        self.draw_button(198, 307, "Yeniden oyna", True)
+        self.draw_button(198, 361, "Menü", True)
 
     def draw_button(self, x: int, y: int, label: str, enabled: bool) -> None:
         self.canvas.create_rectangle(
