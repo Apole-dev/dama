@@ -54,6 +54,16 @@ class GameTests(unittest.TestCase):
         game = Game(board, WHITE)
         self.assertEqual(game.winner, RED)
 
+    def test_undo_restores_board_and_turn(self):
+        game = Game()
+        before = [row[:] for row in game.board]
+        game.play(game.legal_moves()[0])
+        self.assertEqual(game.turn, WHITE)
+        self.assertTrue(game.undo())
+        self.assertEqual(game.board, before)
+        self.assertEqual(game.turn, RED)
+        self.assertFalse(game.undo())
+
 
 if __name__ == "__main__":
     unittest.main()

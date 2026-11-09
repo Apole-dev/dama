@@ -23,6 +23,7 @@ class Game:
         self.board = [row[:] for row in board] if board is not None else self._initial_board()
         self.turn = turn
         self.winner: str | None = None
+        self.history: list[tuple[list[list[str | None]], str]] = []
         self._update_winner()
 
     @staticmethod
@@ -111,6 +112,7 @@ class Game:
     def play(self, move: Move) -> None:
         if move not in self.legal_moves():
             raise ValueError("Illegal move")
+        self.history.append(([row[:] for row in self.board], self.turn))
         row, col = move.start
         piece = self.board[row][col]
         assert piece is not None
@@ -123,6 +125,13 @@ class Game:
         self.board[end_row][end_col] = piece
         self.turn = WHITE if self.turn == RED else RED
         self._update_winner()
+
+    def undo(self) -> bool:
+        if not self.history:
+            return False
+        self.board, self.turn = self.history.pop()
+        self._update_winner()
+        return True
 
     def _update_winner(self) -> None:
         self.winner = None

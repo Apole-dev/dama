@@ -1,14 +1,16 @@
 # Dama
 
-Two player checkers game based on the supplied board image.
+Two player checkers game based on the supplied board image. The game uses Python and Tkinter.
 
 ## Run
 
 ```sh
-python3 dama.py
+python3 ui.py
 ```
 
-Choose a move by its number. Enter `q` to quit.
+Select a piece, then click a marked square. For a capture chain, click each landing square. Use the buttons to start a new game or undo a move. Ctrl N and Ctrl Z are keyboard shortcuts.
+
+The terminal version is available with `python3 dama.py`.
 
 ## Rules
 
