@@ -103,20 +103,20 @@ class DamaWindow:
             return
         x = BOARD_SIZE + 2 * MARGIN + 20
         if x <= event.x <= x + PANEL_WIDTH - 40:
-            if 372 <= event.y <= 414:
+            if 300 <= event.y <= 342:
                 self.new_game()
-            elif 426 <= event.y <= 468:
+            elif 354 <= event.y <= 396:
                 self.undo()
-            elif 480 <= event.y <= 522:
+            elif 408 <= event.y <= 450:
                 self.show_menu()
 
     def click_menu(self, x: int, y: int) -> None:
-        if 52 <= x <= 456 and 250 <= y <= 335:
+        if 194 <= x <= 590 and 190 <= y <= 260:
             self.start_game("local")
-        elif 52 <= x <= 456 and 352 <= y <= 437:
+        elif 194 <= x <= 590 and 276 <= y <= 346:
             self.start_game("computer")
-        elif 458 <= y <= 502:
-            for name, left, right in (("easy", 52, 174), ("normal", 186, 308), ("hard", 320, 442)):
+        elif 406 <= y <= 452:
+            for name, left, right in (("easy", 194, 316), ("normal", 328, 450), ("hard", 462, 584)):
                 if left <= x <= right:
                     self.difficulty = name
                     self.draw()
@@ -217,89 +217,38 @@ class DamaWindow:
 
     def draw_menu(self) -> None:
         self.canvas.create_rectangle(0, 0, 784, 572, fill=BACKGROUND, outline="")
-        self.canvas.create_rectangle(0, 0, 14, 572, fill="#b34a3c", outline="")
         self.canvas.create_text(
-            52, 41, anchor="nw", text="MASA OYUNU", fill=ACCENT,
-            font=("DejaVu Sans", 11, "bold")
+            392, 103, text="DAMA", fill="#f4dfb9",
+            font=("DejaVu Sans", 46, "bold")
         )
+        self.canvas.create_line(318, 153, 466, 153, fill="#b95b47", width=3)
+        self.draw_menu_card(194, 190, "İki oyuncu")
+        self.draw_menu_card(194, 276, "Bilgisayara karşı")
         self.canvas.create_text(
-            49, 72, anchor="nw", text="KIZIL", fill="#f4dfb9",
-            font=("DejaVu Sans", 44, "bold")
+            194, 382, anchor="nw", text="SEVİYE", fill="#a99983",
+            font=("DejaVu Sans", 10, "bold")
         )
-        self.canvas.create_text(
-            49, 129, anchor="nw", text="DAMA", fill="#d95a49",
-            font=("DejaVu Sans", 44, "bold")
-        )
-        self.canvas.create_text(
-            53, 209, anchor="nw", text="Bir hamle seç. Tahtayı değiştir.",
-            fill="#bda88d", font=("DejaVu Sans", 12)
-        )
-        self.draw_menu_card(52, 250, "İKİ OYUNCU", "Aynı masada sırayla oynayın.", "01")
-        self.draw_menu_card(52, 352, "BİLGİSAYARA KARŞI", "Kırmızı taşlarla bilgisayara karşı oynayın.", "02")
-        labels = (("easy", "KOLAY", 52), ("normal", "ORTA", 186), ("hard", "ZOR", 320))
+        labels = (("easy", "Kolay", 194), ("normal", "Orta", 328), ("hard", "Zor", 462))
         for value, label, x in labels:
             active = value == self.difficulty
             self.canvas.create_rectangle(
-                x, 458, x + 122, 502,
+                x, 406, x + 122, 452,
                 fill="#95553e" if active else "#302620",
-                outline=ACCENT if active else "#72543e", width=2
+                outline="#be8160" if active else "#665044", width=2
             )
             self.canvas.create_text(
-                x + 61, 480, text=label,
+                x + 61, 429, text=label,
                 fill="#fff0d2" if active else "#a99983",
-                font=("DejaVu Sans", 11, "bold")
+                font=("DejaVu Sans", 12, "bold")
             )
-        self.canvas.create_text(
-            52, 529, anchor="nw", text="Bilgisayar seviyesini seçin, sonra oyunu başlatın.",
-            fill="#a3917e", font=("DejaVu Sans", 10)
-        )
-        for row in range(4):
-            for col in range(4):
-                x = 511 + col * 58
-                y = 72 + row * 58
-                self.canvas.create_rectangle(
-                    x, y, x + 58, y + 58,
-                    fill=DARK if (row + col) % 2 else LIGHT,
-                    outline="#5a3b2d"
-                )
-        for x, y, fill, outline in (
-            (598, 101, "#f0e7d5", "#918675"),
-            (714, 101, "#f0e7d5", "#918675"),
-            (540, 275, "#c6383b", "#7b171c"),
-            (656, 275, "#c6383b", "#7b171c"),
-        ):
-            self.canvas.create_oval(
-                x - 23, y - 23, x + 23, y + 23,
-                fill=fill, outline=outline, width=5
-            )
-        self.canvas.create_text(
-            520, 342, anchor="nw", text="OYUN MODUNU SEÇ",
-            fill="#e8cda6", font=("DejaVu Sans", 13, "bold")
-        )
-        self.canvas.create_line(520, 378, 735, 378, fill="#745440", width=2)
-        self.canvas.create_text(
-            520, 397, anchor="nw", text="12 taş. 8 sıra.\nHer hamle önemli.",
-            fill="#bda88d", font=("DejaVu Sans", 12)
-        )
 
-    def draw_menu_card(self, x: int, y: int, title: str, detail: str, number: str) -> None:
+    def draw_menu_card(self, x: int, y: int, title: str) -> None:
         self.canvas.create_rectangle(
-            x, y, x + 404, y + 85, fill="#342722", outline="#9d6947", width=2
-        )
-        self.canvas.create_rectangle(
-            x, y, x + 6, y + 85, fill="#cb654e", outline=""
+            x, y, x + 396, y + 70, fill="#342722", outline="#8e684d", width=2
         )
         self.canvas.create_text(
-            x + 23, y + 15, anchor="nw", text=title,
-            fill="#f6dfba", font=("DejaVu Sans", 16, "bold")
-        )
-        self.canvas.create_text(
-            x + 24, y + 50, anchor="nw", text=detail,
-            fill="#bca996", font=("DejaVu Sans", 10)
-        )
-        self.canvas.create_text(
-            x + 374, y + 23, text=number,
-            fill="#bd795a", font=("DejaVu Sans", 14, "bold")
+            x + 198, y + 35, text=title,
+            fill="#f6dfba", font=("DejaVu Sans", 17, "bold")
         )
 
     def draw_board(self) -> None:
@@ -409,31 +358,16 @@ class DamaWindow:
         white_count = sum(piece is not None and piece.lower() == "w"
                           for row in board for piece in row)
         self.canvas.create_text(
-            x, 161, anchor="nw", text=f"Kırmızı  {red_count}",
+            x, 183, anchor="nw", text=f"Kırmızı  {red_count}",
             fill="#e8c5b8", font=("DejaVu Sans", 13)
         )
         self.canvas.create_text(
-            x, 188, anchor="nw", text=f"Beyaz    {white_count}",
+            x, 213, anchor="nw", text=f"Beyaz    {white_count}",
             fill="#f0e7d5", font=("DejaVu Sans", 13)
         )
-        mode_text = "İki oyuncu" if self.mode == "local" else "Bilgisayara karşı"
-        self.canvas.create_text(
-            x, 230, anchor="nw", text=mode_text,
-            fill=ACCENT, font=("DejaVu Sans", 11, "bold")
-        )
-        tips = ("Taşı seç.", "İşaretli kareye tıkla.", "Alma varsa zorunludur.")
-        for index, tip in enumerate(tips):
-            self.canvas.create_text(
-                x, 265 + index * 27, anchor="nw", text=tip,
-                fill="#cbb8a1", font=("DejaVu Sans", 11)
-            )
-        self.draw_button(x, 372, "Yeni oyun", True)
-        self.draw_button(x, 426, "Geri al", self.preview is not None or bool(self.game.history))
-        self.draw_button(x, 480, "Ana menü", True)
-        self.canvas.create_text(
-            x, 538, anchor="nw", text="Ctrl N  Yeni oyun    Ctrl Z  Geri al",
-            fill="#a9947c", font=("DejaVu Sans", 10)
-        )
+        self.draw_button(x, 300, "Yeni oyun", True)
+        self.draw_button(x, 354, "Geri al", self.preview is not None or bool(self.game.history))
+        self.draw_button(x, 408, "Menü", True)
 
     def draw_button(self, x: int, y: int, label: str, enabled: bool) -> None:
         self.canvas.create_rectangle(
