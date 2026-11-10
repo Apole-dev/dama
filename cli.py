@@ -18,7 +18,7 @@ def format_move(move: Move) -> str:
 
 def main() -> None:
     game = Game()
-    while game.winner is None:
+    while not game.finished:
         print_board(game)
         moves = game.legal_moves()
         print(f"{game.turn} to move")
@@ -32,7 +32,7 @@ def main() -> None:
             continue
         game.play(moves[int(choice) - 1])
     print_board(game)
-    print(f"{game.winner} wins")
+    print("Draw" if game.draw_reason else f"{game.winner} wins")
 
 
 if __name__ == "__main__":

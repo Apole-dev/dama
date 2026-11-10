@@ -1,10 +1,13 @@
 import queue
 import threading
 import tkinter as tk
+from pathlib import Path
+from tkinter import filedialog, messagebox
 
 from computer import choose_move
 from dama import Game, Move, SIZE, WHITE
 from render import BACKGROUND, BOARD_SIZE, CELL, MARGIN, PANEL_WIDTH, GameRenderer
+from record import export_pdn, move_text
 from save import load_game, save_game
 
 
@@ -25,8 +28,6 @@ class DamaWindow:
         self.difficulty = "normal"
         self.theme = "classic"
         self.saved_game = load_game()
-        if self.saved_game is not None and self.saved_game[0].winner is not None:
-            self.saved_game = None
         if self.saved_game is not None:
             self.theme = self.saved_game[4]
         self.moves: list[Move] = []
@@ -42,6 +43,8 @@ class DamaWindow:
         self.ai_move: Move | None = None
         self.ai_step = 0
         self.animated_piece: tuple[str, float, float] | None = None
+        self.replay_index: int | None = None
+        self.history_window: tk.Toplevel | None = None
 
         width = BOARD_SIZE + 2 * MARGIN + PANEL_WIDTH
         height = BOARD_SIZE + 2 * MARGIN
@@ -63,7 +66,7 @@ class DamaWindow:
 
     def continue_game(self) -> None:
         saved = load_game()
-        if saved is None or saved[0].winner is not None:
+        if saved is None:
             self.saved_game = None
             self.draw()
             return
@@ -76,27 +79,25 @@ class DamaWindow:
         self.last_move = self.moves[-1] if self.moves else None
         self.clear_selection()
         self.draw()
-        if self.mode == "computer" and self.game.turn == WHITE and self.game.winner is None:
+        if self.mode == "computer" and self.game.turn == WHITE and not self.game.finished:
             self.start_computer_turn()
 
     def persist(self) -> None:
         save_game(self.moves, self.mode, self.difficulty, self.theme)
-        self.saved_game = None if self.game.winner is not None else (
-            self.game, self.moves, self.mode, self.difficulty, self.theme
-        )
+        self.saved_game = (self.game, self.moves, self.mode, self.difficulty, self.theme)
 
     def show_menu(self) -> None:
+        self.close_history()
         self.ai_generation += 1
         self.ai_thinking = False
         self.ai_error = False
         self.screen = "menu"
         self.clear_selection()
         self.saved_game = load_game()
-        if self.saved_game is not None and self.saved_game[0].winner is not None:
-            self.saved_game = None
         self.draw()
 
     def new_game(self) -> None:
+        self.close_history()
         self.ai_generation += 1
         self.ai_thinking = False
         self.ai_error = False
@@ -144,7 +145,7 @@ class DamaWindow:
         if self.screen == "menu":
             self.click_menu(event.x, event.y)
             return
-        if self.game.winner is not None and 198 <= event.x <= 370:
+        if self.game.finished and 198 <= event.x <= 370:
             if 307 <= event.y <= 351:
                 self.new_game()
                 return
@@ -168,9 +169,16 @@ class DamaWindow:
                 self.show_history()
 
     def show_history(self) -> None:
+        if self.ai_thinking or self.history_window is not None:
+            return
         window = tk.Toplevel(self.root)
         window.title("Hamleler")
-        window.geometry("300x400")
+        window.geometry("320x440")
+        window.transient(self.root)
+        window.grab_set()
+        self.history_window = window
+        self.replay_index = len(self.moves)
+        window.protocol("WM_DELETE_WINDOW", self.close_history)
         frame = tk.Frame(window)
         frame.pack(fill="both", expand=True, padx=12, pady=12)
         scrollbar = tk.Scrollbar(frame)
@@ -178,13 +186,45 @@ class DamaWindow:
         history = tk.Listbox(frame, font=("DejaVu Sans", 11), yscrollcommand=scrollbar.set)
         history.pack(side="left", fill="both", expand=True)
         scrollbar.config(command=history.yview)
+        history.insert("end", "Başlangıç")
         for index, move in enumerate(self.moves, 1):
             side = "Kırmızı" if index % 2 else "Beyaz"
-            squares = (move.start,) + move.path
-            separator = " x " if move.captures else " - "
-            notation = separator.join(f"{chr(97 + col)}{8 - row}" for row, col in squares)
-            history.insert("end", f"{index}. {side}  {notation}")
+            history.insert("end", f"{index}. {side}  {move_text(move)}")
+        history.selection_set(len(self.moves))
         history.yview_moveto(1)
+        history.bind("<<ListboxSelect>>", lambda event: self.select_replay(history))
+        controls = tk.Frame(window)
+        controls.pack(fill="x", padx=12, pady=(0, 12))
+        tk.Button(controls, text="PDN kaydet", command=self.save_pdn,
+                  state="normal" if self.moves else "disabled").pack(side="left")
+        tk.Button(controls, text="Oyuna dön", command=self.close_history).pack(side="right")
+        self.draw()
+
+    def select_replay(self, history: tk.Listbox) -> None:
+        if history.curselection():
+            self.replay_index = history.curselection()[0]
+            self.draw()
+
+    def close_history(self) -> None:
+        if self.history_window is not None:
+            self.history_window.destroy()
+            self.history_window = None
+        self.replay_index = None
+        if hasattr(self, "renderer"):
+            self.draw()
+
+    def save_pdn(self) -> None:
+        if self.history_window is None or not self.moves:
+            return
+        filename = filedialog.asksaveasfilename(
+            parent=self.history_window, defaultextension=".pdn",
+            filetypes=[("PDN", "*.pdn")], initialfile="dama.pdn",
+        )
+        if filename:
+            try:
+                Path(filename).write_text(export_pdn(self.game, self.moves), encoding="utf-8")
+            except OSError as error:
+                messagebox.showerror("Kayıt hatası", str(error), parent=self.history_window)
 
     def click_menu(self, x: int, y: int) -> None:
         if 52 <= x <= 448 and 205 <= y <= 275:
@@ -204,7 +244,7 @@ class DamaWindow:
                     break
 
     def choose_square(self, square: tuple[int, int]) -> None:
-        if self.game.winner is not None or self.ai_thinking:
+        if self.game.finished or self.ai_thinking or self.replay_index is not None:
             return
         if self.mode == "computer" and self.game.turn == WHITE:
             return
@@ -251,7 +291,7 @@ class DamaWindow:
             self.last_move = move
             self.clear_selection()
             self.persist()
-            if self.mode == "computer" and self.game.winner is None:
+            if self.mode == "computer" and not self.game.finished:
                 self.start_computer_turn()
 
     def start_computer_turn(self) -> None:

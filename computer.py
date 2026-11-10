@@ -28,7 +28,7 @@ def to_fen(game: Game) -> str:
 def choose_move(game: Game, difficulty: str = "normal") -> Move:
     from draughts import AmericanBoard, SimpleEngine
 
-    if game.turn != WHITE or game.winner is not None:
+    if game.turn != WHITE or game.finished:
         raise ValueError("Computer cannot move")
 
     class ForcedCaptureBoard(AmericanBoard):

@@ -19,7 +19,7 @@ class RenderState(Protocol):
     screen: str
     difficulty: str
     theme: str
-    saved_game: object | None
+    saved_game: tuple[Game, list[Move], str, str, str] | None
     moves: list[Move]
     game: Game
     selected: Position | None
@@ -32,6 +32,7 @@ class RenderState(Protocol):
     ai_move: Move | None
     ai_step: int
     animated_piece: tuple[str, float, float] | None
+    replay_index: int | None
 
 
 class GameRenderer:
@@ -46,8 +47,15 @@ class GameRenderer:
             return
         self.draw_board()
         self.draw_panel()
-        if self.state.game.winner is not None:
+        if self.state.game.finished and self.state.replay_index is None:
             self.draw_result()
+
+    def display_board(self) -> list[list[str | None]]:
+        if self.state.replay_index is not None:
+            if self.state.replay_index < len(self.state.game.history):
+                return self.state.game.history[self.state.replay_index][0]
+            return self.state.game.board
+        return self.state.preview if self.state.preview is not None else self.state.game.board
 
     def colors(self) -> tuple[str, str, str, str, str, str, str]:
         if self.state.theme == "slate":
@@ -82,7 +90,8 @@ class GameRenderer:
             )
         self.draw_menu_art()
         if self.state.saved_game is not None:
-            self.draw_menu_option(503, 410, "Devam et")
+            label = "Son oyunu aç" if self.state.saved_game[0].finished else "Devam et"
+            self.draw_menu_option(503, 410, label)
         self.draw_menu_option(503, 474, "Tema  " + ("Klasik" if self.state.theme == "classic" else "Arduvaz"))
 
     def draw_menu_option(self, x: int, y: int, label: str) -> None:
@@ -134,15 +143,19 @@ class GameRenderer:
             x0 - 7, y0 - 7, x0 + BOARD_SIZE + 7, y0 + BOARD_SIZE + 7,
             fill=frame, outline="#b88a56", width=3
         )
-        board = self.state.preview if self.state.preview is not None else self.state.game.board
+        board = self.display_board()
         destinations = (
             {move.path[self.state.step_index] for move in self.state.candidates}
             if self.state.candidates else set()
         )
         selectable = (
             {move.start for move in self.state.game.legal_moves()}
-            if self.state.selected is None and not self.state.ai_thinking else set()
+            if self.state.selected is None and not self.state.ai_thinking
+            and self.state.replay_index is None else set()
         )
+        highlighted = self.state.last_move
+        if self.state.replay_index is not None:
+            highlighted = self.state.moves[self.state.replay_index - 1] if self.state.replay_index else None
         for row in range(SIZE):
             for col in range(SIZE):
                 x1 = x0 + col * CELL
@@ -155,7 +168,7 @@ class GameRenderer:
                     fill=dark if (row + col) % 2 else light,
                     outline="#71482f", width=1
                 )
-                if self.state.last_move and square in (self.state.last_move.start, self.state.last_move.end):
+                if highlighted and square in (highlighted.start, highlighted.end):
                     self.canvas.create_rectangle(
                         x1 + 4, y1 + 4, x2 - 4, y2 - 4,
                         outline="#ebc86e", width=3
@@ -173,6 +186,13 @@ class GameRenderer:
                 piece = board[row][col]
                 if piece:
                     self.draw_piece(x1, y1, piece, square in selectable)
+                label_color = "#f5e6d0" if (row + col) % 2 else "#5c4131"
+                if row == SIZE - 1:
+                    self.canvas.create_text(x1 + 5, y2 - 5, anchor="sw", text=chr(97 + col),
+                                            fill=label_color, font=("DejaVu Sans", 9, "bold"))
+                if col == 0:
+                    self.canvas.create_text(x1 + 5, y1 + 3, anchor="nw", text=str(8 - row),
+                                            fill=label_color, font=("DejaVu Sans", 9, "bold"))
         if self.state.animated_piece is not None:
             piece, x, y = self.state.animated_piece
             self.draw_piece(x, y, piece, False)
@@ -218,7 +238,11 @@ class GameRenderer:
             font=("DejaVu Sans", 26, "bold")
         )
         self.canvas.create_line(x, 91, x + 170, 91, fill="#8e6d4e", width=2)
-        if self.state.game.winner:
+        if self.state.replay_index is not None:
+            status = f"Hamle {self.state.replay_index} / {len(self.state.moves)}"
+        elif self.state.game.draw_reason:
+            status = "Berabere"
+        elif self.state.game.winner:
             status = "Kırmızı kazandı" if self.state.game.winner == RED else "Beyaz kazandı"
         elif self.state.ai_error:
             status = "Motor açılamadı"
@@ -236,7 +260,7 @@ class GameRenderer:
             x, 117, anchor="nw", text=status, fill=ACCENT,
             font=("DejaVu Sans", 14, "bold")
         )
-        board = self.state.preview if self.state.preview is not None else self.state.game.board
+        board = self.display_board()
         red_count = sum(piece is not None and piece.lower() == "r"
                         for row in board for piece in row)
         white_count = sum(piece is not None and piece.lower() == "w"
@@ -271,9 +295,13 @@ class GameRenderer:
 
     def draw_result(self) -> None:
         self.canvas.create_rectangle(118, 174, 450, 422, fill="#241b18", outline="#d7ad76", width=3)
-        winner = "Kırmızı kazandı" if self.state.game.winner == RED else "Beyaz kazandı"
+        winner = ("Berabere" if self.state.game.draw_reason else
+                  "Kırmızı kazandı" if self.state.game.winner == RED else "Beyaz kazandı")
         self.canvas.create_text(284, 227, text="OYUN BİTTİ", fill="#a99983", font=("DejaVu Sans", 12, "bold"))
         self.canvas.create_text(284, 268, text=winner, fill=ACCENT, font=("DejaVu Sans", 20, "bold"))
+        if self.state.game.draw_reason:
+            reason = "Konum üç kez tekrarlandı" if self.state.game.draw_reason == "repetition" else "40 hamlede ilerleme yok"
+            self.canvas.create_text(284, 294, text=reason, fill="#e8c5b8", font=("DejaVu Sans", 11))
         self.draw_button(198, 307, "Yeniden oyna", True)
         self.draw_button(198, 361, "Menü", True)
 

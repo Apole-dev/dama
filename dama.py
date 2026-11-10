@@ -23,8 +23,18 @@ class Game:
         self.board = [row[:] for row in board] if board is not None else self._initial_board()
         self.turn = turn
         self.winner: str | None = None
-        self.history: list[tuple[list[list[str | None]], str]] = []
-        self._update_winner()
+        self.draw_reason: str | None = None
+        self.quiet_plies = 0
+        self.history: list[tuple[list[list[str | None]], str, int]] = []
+        self.positions = [self._position()]
+        self._update_result()
+
+    @property
+    def finished(self) -> bool:
+        return self.winner is not None or self.draw_reason is not None
+
+    def _position(self) -> tuple[tuple[tuple[str | None, ...], ...], str]:
+        return tuple(tuple(row) for row in self.board), self.turn
 
     @staticmethod
     def _initial_board() -> list[list[str | None]]:
@@ -94,7 +104,7 @@ class Game:
         return moves
 
     def legal_moves(self) -> list[Move]:
-        if self.winner is not None:
+        if self.finished:
             return []
         captures: list[Move] = []
         slides: list[Move] = []
@@ -114,10 +124,11 @@ class Game:
     def play(self, move: Move) -> None:
         if move not in self.legal_moves():
             raise ValueError("Illegal move")
-        self.history.append(([row[:] for row in self.board], self.turn))
+        self.history.append(([row[:] for row in self.board], self.turn, self.quiet_plies))
         row, col = move.start
         piece = self.board[row][col]
         assert piece is not None
+        was_king = piece.isupper()
         self.board[row][col] = None
         for captured_row, captured_col in move.captures:
             self.board[captured_row][captured_col] = None
@@ -125,17 +136,25 @@ class Game:
         if end_row == self._crown_row(piece):
             piece = piece.upper()
         self.board[end_row][end_col] = piece
+        self.quiet_plies = self.quiet_plies + 1 if was_king and not move.captures else 0
         self.turn = WHITE if self.turn == RED else RED
-        self._update_winner()
+        self.positions.append(self._position())
+        self._update_result()
 
     def undo(self) -> bool:
         if not self.history:
             return False
-        self.board, self.turn = self.history.pop()
-        self._update_winner()
+        self.board, self.turn, self.quiet_plies = self.history.pop()
+        self.positions.pop()
+        self._update_result()
         return True
 
-    def _update_winner(self) -> None:
+    def _update_result(self) -> None:
         self.winner = None
+        self.draw_reason = None
         if not self.legal_moves():
             self.winner = WHITE if self.turn == RED else RED
+        elif self.positions.count(self.positions[-1]) >= 3:
+            self.draw_reason = "repetition"
+        elif self.quiet_plies >= 80:
+            self.draw_reason = "no_progress"

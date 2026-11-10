@@ -64,6 +64,34 @@ class GameTests(unittest.TestCase):
         self.assertEqual(game.turn, RED)
         self.assertFalse(game.undo())
 
+    def test_third_repetition_is_draw_and_undo_restores_play(self):
+        board = empty_board()
+        board[7][0] = "R"
+        board[0][7] = "W"
+        game = Game(board)
+        for _ in range(2):
+            for start, end in (
+                ((7, 0), (6, 1)), ((0, 7), (1, 6)),
+                ((6, 1), (7, 0)), ((1, 6), (0, 7)),
+            ):
+                game.play(Move(start, (end,)))
+        self.assertEqual(game.draw_reason, "repetition")
+        self.assertTrue(game.finished)
+        self.assertEqual(game.legal_moves(), [])
+        game.undo()
+        self.assertFalse(game.finished)
+
+    def test_eighty_quiet_plies_are_draw(self):
+        board = empty_board()
+        board[7][0] = "R"
+        board[0][7] = "W"
+        game = Game(board)
+        game.quiet_plies = 79
+        game.play(Move((7, 0), ((6, 1),)))
+        self.assertEqual(game.draw_reason, "no_progress")
+        game.undo()
+        self.assertEqual(game.quiet_plies, 79)
+
 
 if __name__ == "__main__":
     unittest.main()
